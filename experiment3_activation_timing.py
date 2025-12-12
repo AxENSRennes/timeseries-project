@@ -192,7 +192,7 @@ def validate_mu_atom(v_hat, mu_idx, sfreq):
         - mu_peak_power: float, power at mu-band peak
         - harmonic_freq: float, frequency of harmonic peak
         - harmonic_power: float, power at harmonic peak
-        - harmonic_ratio: float, harmonic/fundamental ratio (>0.1 suggests non-sinusoidal)
+        - harmonic_ratio: float, harmonic/fundamental ratio (>0.05 required for validation)
     """
     freqs, psd = signal.welch(v_hat[mu_idx], fs=sfreq, nperseg=min(len(v_hat[mu_idx]), 128))
 
@@ -223,9 +223,10 @@ def validate_mu_atom(v_hat, mu_idx, sfreq):
 
     # Validation criteria:
     # 1. Must have mu-band peak
-    # 2. Harmonic ratio > 0.005 suggests non-sinusoidal waveform (characteristic of mu)
-    #    Note: Even small harmonic content indicates non-sinusoidal structure
-    is_valid = (mu_peak_power > 0) and (harmonic_ratio > 0.005)
+    # 2. Harmonic ratio > 0.05 (5%) indicates non-sinusoidal waveform characteristic of mu
+    #    Literature: Mu-rhythm typically shows 10-20% harmonic content due to comb shape
+    #    A 5% threshold filters out near-sinusoidal oscillations while accepting true mu
+    is_valid = (mu_peak_power > 0) and (harmonic_ratio > 0.05)
 
     return {
         'is_valid': is_valid,
@@ -258,7 +259,14 @@ def compute_psth(z_hat, sigma_ms=50):
 
     Returns:
         psth: (n_atoms, n_times) - smoothed mean activation
-        sem: (n_atoms, n_times) - standard error of mean
+        sem: (n_atoms, n_times) - standard error of mean (approximate, see note)
+
+    Note on confidence intervals:
+        SEM is computed after Gaussian smoothing, which introduces temporal
+        autocorrelation. This makes the resulting 95% CIs slightly optimistic
+        (narrower than they should be). For rigorous uncertainty quantification,
+        bootstrap resampling across trials would be preferred. The smoothed CIs
+        shown in figures should be interpreted as approximate visual guides.
     """
     sigma_samples = int(sigma_ms * sfreq / 1000)
 
@@ -269,6 +277,8 @@ def compute_psth(z_hat, sigma_ms=50):
     psth = gaussian_filter1d(mean_activation, sigma=sigma_samples, axis=1)
 
     # Compute SEM for confidence intervals
+    # Note: SEM computed after smoothing is approximate - smoothing introduces
+    # autocorrelation, making CIs narrower than rigorous bootstrap CIs would be.
     std_activation = np.std(z_hat, axis=0)
     sem = std_activation / np.sqrt(z_hat.shape[0])
     sem_smooth = gaussian_filter1d(sem, sigma=sigma_samples, axis=1)
@@ -402,6 +412,19 @@ def statistical_comparison_erd_ers(z_hat, time_axis, pre_window=(-1.5, 0),
     - ERD (Event-Related Desynchronization): Early suppression of mu-rhythm (0.15-0.75s)
     - ERS (Event-Related Synchronization): Late rebound of mu-rhythm (0.75-2.0s)
 
+    Time Window Justification (Pfurtscheller & Lopes da Silva, 1999):
+    -----------------------------------------------------------------
+    - Baseline (-1.5 to 0s): Standard pre-stimulus reference period
+    - ERD onset at 0.15s: Avoids early evoked components (N20 at ~20ms, P35, N60)
+      and captures mu-ERD which typically peaks at 200-500ms post-stimulus
+    - ERD/ERS boundary at 0.75s: ERD typically lasts 400-600ms; transition to
+      ERS begins around 500-800ms in somatosensory paradigms
+    - ERS window (0.75-2.0s): Captures post-movement/stimulus beta rebound
+      which peaks at 500-1500ms and can persist for several seconds
+
+    Note: These windows are based on median nerve stimulation literature.
+    Results may vary with ±100ms window shifts (sensitivity not tested).
+
     Parameters:
     -----------
     z_hat : array (n_trials, n_atoms, n_times)
@@ -425,6 +448,7 @@ def statistical_comparison_erd_ers(z_hat, time_axis, pre_window=(-1.5, 0),
     Statistical tests:
     - ERD: H1 = erd_window < pre (one-tailed Wilcoxon, tests for suppression)
     - ERS: H1 = ers_window > pre (one-tailed Wilcoxon, tests for rebound)
+    - FDR correction: Benjamini-Hochberg across all 50 tests (25 atoms × 2 phases)
     """
     n_trials, n_atoms, n_times = z_hat.shape
 
