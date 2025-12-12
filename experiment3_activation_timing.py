@@ -50,16 +50,14 @@ t_lim = (-2, 4)  # Epoch limits: 2s pre-stimulus, 4s post-stimulus
 # This is a VISUALIZATION choice, not affecting statistical analysis.
 RASTER_THRESHOLD_PERCENTILE = 90
 
-# Statistical aggregation method (Fix 5):
+# Statistical aggregation method (Pfurtscheller & Aranibar, 1977):
 # Controls how per-trial activation values are computed within time windows.
-# - 'max': Uses peak activation per trial (recommended for sparse signals)
-#          More sensitive to transient activations, which is appropriate for CSC
-#          where activations are designed to be sparse (L1 regularization).
-# - 'mean': Uses average activation per trial (more conservative)
-#           May miss transient events but more robust to noise.
-# Literature support: Sparse coding methods typically use peak-based metrics
-# as the sparsity constraint encourages brief, strong activations.
-STAT_AGGREGATION = 'max'
+# - 'mean': Uses average activation per trial (standard ERD/ERS method)
+#           The canonical ERD% formula uses mean power: ERD% = ((R-A)/R)*100
+#           This is the established method in the neurophysiology literature.
+# - 'max': Uses peak activation per trial (non-standard, not recommended)
+#           May inflate effect sizes and is not comparable to literature values.
+STAT_AGGREGATION = 'mean'
 
 # One-tailed test justification (Fix 5):
 # We use one-tailed Wilcoxon tests because:
@@ -364,9 +362,9 @@ def statistical_comparison(z_hat, time_axis, pre_window=(-1.5, 0), post_window=(
     pre_mask = (time_axis >= pre_window[0]) & (time_axis < pre_window[1])
     post_mask = (time_axis >= post_window[0]) & (time_axis < post_window[1])
 
-    # Peak activation per trial in each window (more sensitive than mean for sparse signals)
-    pre_trial_means = np.max(z_hat[:, :, pre_mask], axis=2)  # (n_trials, n_atoms)
-    post_trial_means = np.max(z_hat[:, :, post_mask], axis=2)
+    # Mean activation per trial in each window (standard ERD/ERS method)
+    pre_trial_means = np.mean(z_hat[:, :, pre_mask], axis=2)  # (n_trials, n_atoms)
+    post_trial_means = np.mean(z_hat[:, :, post_mask], axis=2)
 
     p_values = np.zeros(n_atoms)
     effect_sizes = np.zeros(n_atoms)
