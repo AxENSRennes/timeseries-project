@@ -1,0 +1,21 @@
+# Requirements for reproducing CSC experiments from:
+# "Multivariate Convolutional Sparse Coding for Electromagnetic Brain Signals"
+# (Dupré La Tour et al., NeurIPS 2018)
+
+# Core scientific computing
+numpy>=1.20
+scipy>=1.7
+matplotlib>=3.5
+scikit-learn>=1.0
+
+# CSC library (main algorithm implementation)
+alphacsc>=0.4
+
+# MEG/EEG data processing and visualization
+mne>=1.0
+
+# For parallel processing (dependency of alphacsc)
+joblib>=1.0
+
+# For JIT compilation (dependency of alphacsc)
+numba>=0.50
